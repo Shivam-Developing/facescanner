@@ -34,3 +34,20 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# React Native / Android / iOS
+ios/Pods/
+android/.gradle/
+android/app/build/
+android/build/
+*.keystore
+!debug.keystore
+
+# Env
+.env
+.env.local
+*.env.*
+
+# TFLite Model
+*.tflite
+
