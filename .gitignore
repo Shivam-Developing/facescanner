@@ -53,3 +53,7 @@ android/build/
 # TFLite Model
 *.tflite
 
+# Assets (avoid binary files in Snack imports)
+assets/
+
+
