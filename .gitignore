@@ -50,10 +50,6 @@ android/build/
 .env.local
 *.env.*
 
-# TFLite Model
-*.tflite
 
-# Assets (avoid binary files in Snack imports)
-assets/
 
 
