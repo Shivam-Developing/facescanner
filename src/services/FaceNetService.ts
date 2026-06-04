@@ -33,7 +33,7 @@ class FaceNetService {
     const start = Date.now();
     try {
       this.model = await loadTensorflowModel(
-        require('../../android/app/src/main/assets/MobileFaceNet.tflite')
+        'https://github.com/sirius-ai/MobileFaceNet_TF/raw/master/models/MobileFaceNet.tflite'
       );
       console.log(`[FaceNet] Native model loaded in ${Date.now() - start}ms`);
     } catch (err) {

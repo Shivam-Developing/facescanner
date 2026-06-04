@@ -9,6 +9,7 @@ import LivenessDetector from '../services/LivenessDetector';
 import FaceNetService from '../services/FaceNetService';
 import StorageService from '../services/StorageService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { isMockEnvironment } from '../utils/Environment';
 
 type AuthStep = 'IDLE' | 'LIVENESS' | 'MATCHING' | 'SUCCESS' | 'FAIL';
 
@@ -121,7 +122,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
     });
   };
 
-  const handleFaceDetected = useCallback(async (face: any) => {
+  const handleFaceDetected = useCallback(async (face: any, facePixels: Float32Array | null) => {
     if (step !== 'LIVENESS') return;
 
     // Check challenge compliance
@@ -145,16 +146,15 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
       // Extract raw frame embedding
       // (Uses mock embedding generator inside service if in Expo Go/Snack)
-      const simulatedFrame = new Float32Array(112 * 112 * 3).fill(0.1);
-      const liveEmbedding = await FaceNetService.extractEmbedding(simulatedFrame);
+      const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
+      const liveEmbedding = await FaceNetService.extractEmbedding(inputFrame);
 
       // Cosine similarity matching
       let similarity = FaceNetService.cosineSimilarity(liveEmbedding, storedEmbedding);
       
-      // In mock/Snack mode, since liveEmbedding is randomized, it might fail matching.
-      // To create a cohesive demonstration experience on Snack, if they successfully pass
-      // the liveness challenges, we simulate a matching score above threshold (e.g. 0.88).
-      if (typeof document !== 'undefined' || LivenessDetector.evaluateFace(face)) {
+      // In mock/Snack mode, since liveEmbedding is randomized, it will always fail matching.
+      // We simulate a successful match score ONLY in the mock environment.
+      if (isMockEnvironment()) {
         // Force successful match score in mock mode for enrolled users
         similarity = 0.82 + Math.random() * 0.1;
       }

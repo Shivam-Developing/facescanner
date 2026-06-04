@@ -10,6 +10,7 @@ let useCameraDevice: any = null;
 let useFrameProcessor: any = null;
 let runOnJS: any = null;
 let useFaceDetector: any = null;
+let useResizePlugin: any = null;
 
 let ExpoCameraView: any = null;
 
@@ -25,6 +26,8 @@ try {
 
     const ml = require('@react-native-ml-kit/face-detection');
     useFaceDetector = ml.useFaceDetector;
+
+    useResizePlugin = require('vision-camera-resize-plugin').useResizePlugin;
   } else {
     ExpoCameraView = require('expo-camera').CameraView;
   }
@@ -33,7 +36,7 @@ try {
 }
 
 interface FaceCameraProps {
-  onFaceDetected:  (face: any) => void;
+  onFaceDetected:  (face: any, facePixels: Float32Array | null) => void;
   onNoFace?:       () => void;
   instructionText?: string;
   isActive?:       boolean;
@@ -121,9 +124,13 @@ export const FaceCamera: React.FC<FaceCameraProps> = ({
     minFaceSize:        0.15,
   }) : null;
 
-  const handleFaces = useCallback((faces: any[]) => {
+  // Set up the resize plugin hook at the top level
+  const resizePlugin = useResizePlugin ? useResizePlugin() : null;
+  const resize = resizePlugin ? resizePlugin.resize : null;
+
+  const handleFacesWithPixels = useCallback((faces: any[], pixels: Float32Array | null) => {
     if (faces.length > 0) {
-      onFaceDetected(faces[0]);
+      onFaceDetected(faces[0], pixels);
     } else {
       onNoFace?.();
     }
@@ -133,9 +140,26 @@ export const FaceCamera: React.FC<FaceCameraProps> = ({
     'worklet';
     if (detector) {
       const faces = detector.detectFaces(frame);
-      runOnJS(handleFaces)(faces);
+      if (faces.length > 0 && resize != null) {
+        // Center crop and resize front camera frame to 112x112
+        const resized = resize(frame, {
+          scale: { width: 112, height: 112 },
+          pixelFormat: 'rgb',
+          dataType: 'float32',
+        });
+        
+        // Normalize RGB values from [0, 255] to [-1.0, 1.0] for MobileFaceNet
+        const normalized = new Float32Array(resized.length);
+        for (let i = 0; i < resized.length; i++) {
+          normalized[i] = (resized[i] - 127.5) / 127.5;
+        }
+        
+        runOnJS(handleFacesWithPixels)(faces, normalized);
+      } else {
+        runOnJS(handleFacesWithPixels)(faces, null);
+      }
     }
-  }, [detector, handleFaces]) : null;
+  }, [detector, handleFacesWithPixels, resize]) : null;
 
   if (!permissionChecked) {
     return (

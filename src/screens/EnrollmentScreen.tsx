@@ -33,7 +33,7 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
     setMessage('Align your face within the camera frame');
   };
 
-  const handleFaceDetected = useCallback(async (face: any) => {
+  const handleFaceDetected = useCallback(async (face: any, facePixels: Float32Array | null) => {
     if (step !== 'SCANNING') return;
 
     // Quality gate parameters
@@ -51,13 +51,10 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
 
     setMessage(`Scanning biometric details... [Frame ${captureCount + 1}/${REQUIRED_FRAMES}]`);
 
-    // In a real environment, we would crop the bounding box from the frame buffer:
-    // const cropped = cropFaceRegion(frame.rgba, frame.width, frame.height, face.bounds);
-    // const inputTensor = preprocessFaceForModel(cropped.pixels, cropped.width, cropped.height);
-    // Here we generate a pseudo-frame for inference (or actual frame pixels if in native)
-    const simulatedFrame = new Float32Array(112 * 112 * 3).fill(0.1);
+    // Use actual face pixels if available (native mode), or fallback to simulated frame (mock/Snack mode)
+    const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
     
-    const newFrames = [...faceFrames, simulatedFrame];
+    const newFrames = [...faceFrames, inputFrame];
     setFaceFrames(newFrames);
     setCaptureCount(newFrames.length);
 
