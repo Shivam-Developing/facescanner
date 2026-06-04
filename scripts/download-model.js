@@ -46,6 +46,8 @@ function download(url, dest) {
   });
 }
 
+const isStrict = process.argv.includes('--strict') || process.env.EAS_BUILD === 'true';
+
 console.log('Initializing model download...');
 download(MODEL_URL, DEST_PATH)
   .then(() => {
@@ -54,6 +56,12 @@ download(MODEL_URL, DEST_PATH)
     process.exit(0);
   })
   .catch((err) => {
-    console.error('Error downloading model:', err);
-    process.exit(1);
+    if (isStrict) {
+      console.error('Error downloading model (Strict Mode):', err);
+      process.exit(1);
+    } else {
+      console.warn('[Warning] Failed to download model (Fail-safe Mode):', err.message);
+      console.warn('[Warning] This install will proceed, but you must download the model manually using: npm run download-model');
+      process.exit(0);
+    }
   });
