@@ -141,9 +141,24 @@ export const FaceCamera: React.FC<FaceCameraProps> = ({
     if (detector) {
       const faces = detector.detectFaces(frame);
       if (faces.length > 0 && resize != null) {
-        // Center crop and resize front camera frame to 112x112
+        const face = faces[0];
+        const bbox = face.bounds;
+
+        // Ensure crop boundaries are within frame bounds
+        const cropX = Math.max(0, bbox.left);
+        const cropY = Math.max(0, bbox.top);
+        const cropW = Math.min(bbox.width, frame.width - cropX);
+        const cropH = Math.min(bbox.height, frame.height - cropY);
+
+        // Crop the exact face bounding box and resize to 112x112
         const resized = resize(frame, {
           scale: { width: 112, height: 112 },
+          crop: {
+            x: cropX,
+            y: cropY,
+            width: cropW,
+            height: cropH,
+          },
           pixelFormat: 'rgb',
           dataType: 'float32',
         });

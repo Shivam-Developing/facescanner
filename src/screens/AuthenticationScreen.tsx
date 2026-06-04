@@ -11,7 +11,7 @@ import StorageService from '../services/StorageService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { isMockEnvironment } from '../utils/Environment';
 
-type AuthStep = 'IDLE' | 'LIVENESS' | 'MATCHING' | 'SUCCESS' | 'FAIL';
+type AuthStep = 'IDLE' | 'LIVENESS1' | 'MATCHING' | 'LIVENESS2' | 'SUCCESS' | 'FAIL';
 
 const CHALLENGE_ICONS: Record<string, string> = {
   BLINK:      'eye-outline',
@@ -37,7 +37,9 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
   const [step, setStep]             = useState<AuthStep>('IDLE');
   const [userId, setUserId]           = useState(initialUserId);
-  const [challenge, setChallenge]   = useState('');
+  const [challenge1, setChallenge1] = useState('');
+  const [challenge2, setChallenge2] = useState('');
+  const [similarityResult, setSimilarityResult] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [timer, setTimer]           = useState(7);
   
@@ -47,7 +49,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
   // Pulse animation on the biometric ring during matching/scanning
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
-    if (step === 'LIVENESS' || step === 'MATCHING') {
+    if (step === 'LIVENESS1' || step === 'MATCHING' || step === 'LIVENESS2') {
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(ringScale, { toValue: 1.15, duration: 800, useNativeDriver: true }),
@@ -83,13 +85,14 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
       return;
     }
 
-    // Start challenge
+    // Start challenge 1
     LivenessDetector.reset();
-    const issued = LivenessDetector.issueChallenge();
-    setChallenge(issued);
-    setStep('LIVENESS');
+    const issued1 = LivenessDetector.issueChallenge();
+    setChallenge1(issued1);
+    setChallenge2('');
+    setStep('LIVENESS1');
     setTimer(7);
-    setStatusText(CHALLENGE_LABELS[issued] || 'Authenticate your face');
+    setStatusText(CHALLENGE_LABELS[issued1] || 'Authenticate your face');
 
     if (timerRef.current) clearInterval(timerRef.current);
     
@@ -97,7 +100,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
       setTimer(t => {
         if (t <= 1) {
           clearInterval(timerRef.current!);
-          failAuthentication('Time out. Liveness check failed.');
+          failAuthentication('Time out. First liveness check failed.');
           return 0;
         }
         return t - 1;
@@ -117,77 +120,118 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
       timestamp: Date.now(),
       success: false,
       similarity: 0.0,
-      challenge: challenge || 'NONE',
+      challenge: challenge2 ? `${challenge1},${challenge2}` : `${challenge1 || 'NONE'},NONE`,
       synced: false,
     });
   };
 
   const handleFaceDetected = useCallback(async (face: any, facePixels: Float32Array | null) => {
-    if (step !== 'LIVENESS') return;
+    if (step !== 'LIVENESS1' && step !== 'LIVENESS2') return;
 
-    // Check challenge compliance
-    const passed = LivenessDetector.evaluateFace(face);
-    if (!passed) return;
+    if (step === 'LIVENESS1') {
+      // Check compliance for challenge 1
+      const passed = LivenessDetector.evaluateFace(face);
+      if (!passed) return;
 
-    // Liveness passed! Clean up timers and proceed to match
-    if (timerRef.current) clearInterval(timerRef.current);
-    setStep('MATCHING');
-    setStatusText('Liveness verified. Performing matching...');
+      // First liveness passed! Clean up timers and proceed to match
+      if (timerRef.current) clearInterval(timerRef.current);
+      setStep('MATCHING');
+      setStatusText('Liveness verified. Performing matching...');
 
-    try {
-      const id = userId.trim();
-      const storedEmbedding = await StorageService.getEmbedding(id);
-      
-      if (!storedEmbedding) {
+      try {
+        const id = userId.trim();
+        const storedEmbedding = await StorageService.getEmbedding(id);
+        
+        if (!storedEmbedding) {
+          setStep('FAIL');
+          setStatusText('User template not found.');
+          return;
+        }
+
+        // Extract raw frame embedding
+        const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
+        const liveEmbedding = await FaceNetService.extractEmbedding(inputFrame);
+
+        // Cosine similarity matching
+        let similarity = FaceNetService.cosineSimilarity(liveEmbedding, storedEmbedding);
+        
+        if (isMockEnvironment()) {
+          // Force successful match score in mock mode for enrolled users
+          similarity = 0.82 + Math.random() * 0.1;
+        }
+
+        const matched = FaceNetService.isMatch(similarity);
+        setSimilarityResult(similarity);
+
+        if (matched) {
+          // Match succeeded! Now start secondary challenge (LIVENESS2)
+          let issued2 = LivenessDetector.issueChallenge();
+          while (issued2 === challenge1) {
+            issued2 = LivenessDetector.issueChallenge();
+          }
+          setChallenge2(issued2);
+          setStep('LIVENESS2');
+          setTimer(7);
+          setStatusText(CHALLENGE_LABELS[issued2] || 'Perform secondary check');
+
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = setInterval(() => {
+            setTimer(t => {
+              if (t <= 1) {
+                clearInterval(timerRef.current!);
+                failAuthentication('Time out. Re-liveness check failed.');
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+        } else {
+          setStep('FAIL');
+          setStatusText(`Access Denied: similarity ${(similarity * 100).toFixed(1)}% too low`);
+          
+          await StorageService.logAuthEvent({
+            userId: id,
+            timestamp: Date.now(),
+            success: false,
+            similarity,
+            challenge: `${challenge1},NONE`,
+            synced: false,
+          });
+        }
+
+      } catch (e) {
+        console.error('[Authentication] Matching error:', e);
         setStep('FAIL');
-        setStatusText('User template not found.');
-        return;
+        setStatusText('Authentication error occurred.');
       }
+    } else if (step === 'LIVENESS2') {
+      // Check compliance for challenge 2
+      const passed = LivenessDetector.evaluateFace(face);
+      if (!passed) return;
 
-      // Extract raw frame embedding
-      // (Uses mock embedding generator inside service if in Expo Go/Snack)
-      const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
-      const liveEmbedding = await FaceNetService.extractEmbedding(inputFrame);
+      // Liveness 2 passed! Fully authenticated!
+      if (timerRef.current) clearInterval(timerRef.current);
+      setStep('SUCCESS');
+      setStatusText(`Identity Verified: ${(similarityResult * 100).toFixed(1)}% match`);
 
-      // Cosine similarity matching
-      let similarity = FaceNetService.cosineSimilarity(liveEmbedding, storedEmbedding);
-      
-      // In mock/Snack mode, since liveEmbedding is randomized, it will always fail matching.
-      // We simulate a successful match score ONLY in the mock environment.
-      if (isMockEnvironment()) {
-        // Force successful match score in mock mode for enrolled users
-        similarity = 0.82 + Math.random() * 0.1;
-      }
-
-      const matched = FaceNetService.isMatch(similarity);
-
-      setStep(matched ? 'SUCCESS' : 'FAIL');
-      setStatusText(matched
-        ? `Identity Verified: ${(similarity * 100).toFixed(1)}% match`
-        : `Access Denied: similarity ${(similarity * 100).toFixed(1)}% too low`
-      );
-
-      // Log authentication details
+      const id = userId.trim();
       await StorageService.logAuthEvent({
         userId: id,
         timestamp: Date.now(),
-        success: matched,
-        similarity,
-        challenge,
+        success: true,
+        similarity: similarityResult,
+        challenge: `${challenge1},${challenge2}`,
         synced: false,
       });
-
-    } catch (e) {
-      console.error('[Authentication] Matching error:', e);
-      setStep('FAIL');
-      setStatusText('Authentication error occurred.');
     }
-  }, [step, userId, challenge]);
+  }, [step, userId, challenge1, challenge2, similarityResult]);
 
   const resetState = () => {
     setStep('IDLE');
     setStatusText('');
-    setChallenge('');
+    setChallenge1('');
+    setChallenge2('');
+    setSimilarityResult(0);
   };
 
   const ovalColor = step === 'SUCCESS' ? COLORS.ovalSuccess
@@ -239,16 +283,20 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
   return (
     <SafeAreaView style={styles.container}>
       {/* Challenge Pill */}
-      {step === 'LIVENESS' && challenge && (
+      {((step === 'LIVENESS1' && challenge1) || (step === 'LIVENESS2' && challenge2)) && (
         <View style={styles.challengeCard}>
           <MaterialCommunityIcons
-            name={CHALLENGE_ICONS[challenge] as any}
+            name={CHALLENGE_ICONS[step === 'LIVENESS1' ? challenge1 : challenge2] as any}
             size={32}
             color={COLORS.warning}
           />
           <View style={styles.challengeMeta}>
-            <Text style={styles.challengeLabel}>Challenge Issued</Text>
-            <Text style={styles.challengeText}>{CHALLENGE_LABELS[challenge]}</Text>
+            <Text style={styles.challengeLabel}>
+              {step === 'LIVENESS1' ? 'Liveness Challenge 1' : 'Re-Liveness Challenge 2'}
+            </Text>
+            <Text style={styles.challengeText}>
+              {CHALLENGE_LABELS[step === 'LIVENESS1' ? challenge1 : challenge2]}
+            </Text>
           </View>
           <View style={styles.timerPill}>
             <Text style={styles.timerText}>{timer}s</Text>
@@ -261,7 +309,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
         <FaceCamera
           onFaceDetected={handleFaceDetected}
           instructionText={statusText}
-          isActive={step === 'LIVENESS'}
+          isActive={step === 'LIVENESS1' || step === 'LIVENESS2'}
         />
         
         {/* Animated Oval Ring */}
