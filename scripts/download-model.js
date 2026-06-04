@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const MODEL_URL = 'https://raw.githubusercontent.com/sirius-ai/MobileFaceNet_TF/master/models/MobileFaceNet.tflite';
+const MODEL_URL = 'https://raw.githubusercontent.com/MCarlomagno/FaceRecognitionAuth/master/assets/mobilefacenet.tflite';
 const DEST_PATH = path.join(__dirname, '../assets/MobileFaceNet.tflite');
 
 // Ensure assets directory exists
