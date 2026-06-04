@@ -1,33 +1,37 @@
 export const COLORS = {
-  // Backgrounds
-  bgPrimary:    '#0A0E1A',   // Deep navy — main background
-  bgCard:       '#141929',   // Slightly lighter card background
-  bgSurface:    '#1C2236',   // Surface elements
+  // Cosmic Dark Backgrounds
+  bgPrimary:    '#050811',   // Deep space black-blue
+  bgCard:       '#101524',   // Translucent deep blue card
+  bgSurface:    '#1A2035',   // Highlighted surfaces
 
-  // Brand
-  accent:       '#4C8EF7',   // Primary blue — buttons, highlights
-  accentGlow:   '#4C8EF725', // Opacity accent — glow effects
-  success:      '#22C55E',   // Green — authentication passed
-  danger:       '#EF4444',   // Red — authentication failed
-  warning:      '#F59E0B',   // Amber — processing / waiting
+  // High-Tech Brand Accent Glows
+  accent:       '#00E5FF',   // Neon Cyber Cyan
+  accentGlow:   'rgba(0, 229, 255, 0.15)', // Neon glow
+  accentSecondary: '#8A2BE2', // Electric Violet
+  accentSecondaryGlow: 'rgba(138, 43, 226, 0.2)', // Violet glow
+  
+  // States
+  success:      '#10B981',   // Emerald Green
+  danger:       '#F43F5E',   // Rose Red
+  warning:      '#FBBF24',   // Bright Amber
 
   // Text
   textPrimary:  '#FFFFFF',
   textSecondary:'#94A3B8',
-  textMuted:    '#475569',
+  textMuted:    '#64748B',
 
-  // Oval/Frame
-  ovalBorder:   '#4C8EF7',
-  ovalSuccess:  '#22C55E',
-  ovalFail:     '#EF4444',
+  // Biometric Oval Ring Glows
+  ovalBorder:   '#00E5FF',
+  ovalSuccess:  '#10B981',
+  ovalFail:     '#F43F5E',
 };
 
 export const FONTS = {
-  heading:  { fontSize: 24, fontWeight: '700' as const, color: COLORS.textPrimary },
-  subhead:  { fontSize: 16, fontWeight: '500' as const, color: COLORS.textSecondary },
-  body:     { fontSize: 14, fontWeight: '400' as const, color: COLORS.textSecondary },
-  label:    { fontSize: 12, fontWeight: '600' as const, color: COLORS.textMuted },
-  button:   { fontSize: 16, fontWeight: '600' as const, color: COLORS.textPrimary },
+  heading:  { fontSize: 24, fontWeight: '700' as const, color: COLORS.textPrimary, letterSpacing: 0.5 },
+  subhead:  { fontSize: 16, fontWeight: '600' as const, color: COLORS.textSecondary },
+  body:     { fontSize: 14, fontWeight: '400' as const, color: COLORS.textSecondary, lineHeight: 20 },
+  label:    { fontSize: 11, fontWeight: '700' as const, color: COLORS.textMuted, letterSpacing: 1 },
+  button:   { fontSize: 16, fontWeight: '700' as const, color: '#050811' }, // Dark text on light accent
 };
 
 export const SPACING = {
@@ -35,5 +39,5 @@ export const SPACING = {
 };
 
 export const RADIUS = {
-  sm: 8, md: 12, lg: 16, xl: 24, full: 9999,
+  sm: 6, md: 12, lg: 20, xl: 28, full: 9999,
 };

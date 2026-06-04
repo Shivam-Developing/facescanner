@@ -30,7 +30,7 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
       return;
     }
     setStep('SCANNING');
-    setMessage('Align your face within the camera frame');
+    setMessage('Align your face within the scanner oval');
   };
 
   const handleFaceDetected = useCallback(async (face: any, facePixels: Float32Array | null) => {
@@ -41,15 +41,15 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
     
     // Validate posture/eyes
     if (Math.abs(headEulerAngleY) > 15) {
-      setMessage('Please look straight at the camera');
+      setMessage('Align face: Look straight forward');
       return;
     }
     if (leftEyeOpenProbability < 0.5 || rightEyeOpenProbability < 0.5) {
-      setMessage('Keep your eyes open');
+      setMessage('Align face: Keep eyes fully open');
       return;
     }
 
-    setMessage(`Scanning biometric details... [Frame ${captureCount + 1}/${REQUIRED_FRAMES}]`);
+    setMessage(`Biometric Captured [Frame ${captureCount + 1}/${REQUIRED_FRAMES}]`);
 
     // Use actual face pixels if available (native mode), or fallback to simulated frame (mock/Snack mode)
     const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
@@ -60,7 +60,7 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
 
     if (newFrames.length >= REQUIRED_FRAMES) {
       setStep('CAPTURED');
-      setMessage('Compiling facial biometrics...');
+      setMessage('Compiling facial vector keys...');
       await saveEnrollment(newFrames);
     }
   }, [step, captureCount, faceFrames]);
@@ -83,11 +83,11 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
       const id = userId.trim();
       await StorageService.saveEmbedding(id, avgEmbedding);
       setStep('SAVED');
-      setMessage(`Biometric profile enrolled successfully for ID: ${id}`);
+      setMessage(`Biometric vector registered successfully for ID: ${id}`);
     } catch (e) {
       console.error('[Enrollment] Save failed:', e);
       setStep('ERROR');
-      setMessage('Enrollment failed. Please try again.');
+      setMessage('Biometric compile failed. System index error.');
     }
   };
 
@@ -107,41 +107,54 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
         >
           <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
             <View style={styles.instructionCard}>
-              <MaterialCommunityIcons name="account-circle-outline" size={80} color={COLORS.accent} style={{ alignSelf: 'center', marginBottom: SPACING.md }} />
-              <Text style={styles.heading}>Biometric Enrollment</Text>
+              <View style={styles.badgeCircle}>
+                <MaterialCommunityIcons name="account-key-outline" size={48} color={COLORS.accent} />
+              </View>
+              
+              <Text style={styles.heading}>Biometric Setup</Text>
               <Text style={styles.body}>
-                We will capture 3 facial profiles to configure your offline biometric key. This data is fully encrypted and stays on your device.
+                Enroll your operator ID to generate a secure 512D facial key vector. Data remains 100% on-device and fully encrypted.
               </Text>
 
               {/* ID Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>User ID / Employee Code</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., EMP1024, Guest_01"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={userId}
-                  onChangeText={setUserId}
-                  autoCapitalize="characters"
-                  maxLength={20}
-                />
+                <Text style={styles.inputLabel}>Operator ID / Employee Code</Text>
+                <View style={styles.inputWrapper}>
+                  <MaterialCommunityIcons name="badge-account-outline" size={20} color={COLORS.textSecondary} style={{ marginLeft: SPACING.md }} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. NHAI_EMP_102"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={userId}
+                    onChangeText={setUserId}
+                    autoCapitalize="characters"
+                    maxLength={20}
+                  />
+                </View>
               </View>
 
               {/* Quality Tips */}
               <View style={styles.tipsList}>
-                {['Look directly into the camera', 'Keep eyes open and neutral expression', 'Find a well-lit space', 'Remove sunglasses or face coverings'].map(tip => (
+                <Text style={styles.tipsHeader}>ENROLLMENT COMPLIANCE</Text>
+                {[
+                  'Ensure neutral, bright lighting',
+                  'Align face directly centered in oval',
+                  'Keep eyes fully open and blink naturally',
+                  'Remove glasses or hats during capture'
+                ].map(tip => (
                   <View key={tip} style={styles.tipRow}>
-                    <MaterialCommunityIcons name="check-circle" size={16} color={COLORS.success} />
+                    <View style={styles.statusDot} />
                     <Text style={styles.tipText}>{tip}</Text>
                   </View>
                 ))}
               </View>
 
               <TouchableOpacity style={styles.primaryBtn} onPress={startScanning}>
-                <Text style={styles.primaryBtnText}>Start Scanning</Text>
+                <Text style={styles.primaryBtnText}>Initialize Scanner</Text>
               </TouchableOpacity>
+              
               <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.goBack()}>
-                <Text style={styles.ghostBtnText}>Go Back</Text>
+                <Text style={styles.ghostBtnText}>Return to Terminal</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -152,33 +165,44 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
 
   if (step === 'SAVED') {
     return (
-      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: SPACING.lg }]}>
-        <MaterialCommunityIcons name="shield-check" size={100} color={COLORS.success} />
-        <Text style={[styles.heading, { marginTop: SPACING.lg, textAlign: 'center' }]}>Enrollment Complete!</Text>
-        <Text style={[styles.body, { textAlign: 'center', marginTop: SPACING.sm, color: COLORS.textSecondary }]}>
+      <SafeAreaView style={[styles.container, styles.resultLayout]}>
+        <View style={[styles.successGlow, { borderColor: COLORS.success }]}>
+          <MaterialCommunityIcons name="check-decagram-outline" size={80} color={COLORS.success} />
+        </View>
+        <Text style={[styles.heading, { marginTop: SPACING.xl, textAlign: 'center' }]}>Operator Registered</Text>
+        <Text style={[styles.body, { textAlign: 'center', marginTop: SPACING.sm, color: COLORS.textSecondary, paddingHorizontal: SPACING.lg }]}>
           {message}
         </Text>
-        <TouchableOpacity style={[styles.primaryBtn, { marginTop: SPACING.xl, width: '100%' }]} onPress={() => navigation.navigate('Authentication', { userId })}>
-          <Text style={styles.primaryBtnText}>Test Authentication Now</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.ghostBtn} onPress={resetEnrollment}>
-          <Text style={styles.ghostBtnText}>Register Another User</Text>
-        </TouchableOpacity>
+        
+        <View style={styles.resultActions}>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.success }]} onPress={() => navigation.navigate('Authentication', { userId })}>
+            <Text style={[styles.primaryBtnText, { color: COLORS.bgPrimary }]}>Execute Verify Test</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.secondaryBtn} onPress={resetEnrollment}>
+            <Text style={[styles.secondaryBtnText, { color: COLORS.textSecondary }]}>Add Another Operator</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
   if (step === 'ERROR') {
     return (
-      <SafeAreaView style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: SPACING.lg }]}>
-        <MaterialCommunityIcons name="close-circle-outline" size={100} color={COLORS.danger} />
-        <Text style={[styles.heading, { marginTop: SPACING.lg, textAlign: 'center' }]}>Enrollment Failed</Text>
+      <SafeAreaView style={[styles.container, styles.resultLayout]}>
+        <View style={[styles.successGlow, { borderColor: COLORS.danger }]}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={80} color={COLORS.danger} />
+        </View>
+        <Text style={[styles.heading, { marginTop: SPACING.xl, textAlign: 'center', color: COLORS.danger }]}>Scanner Timeout</Text>
         <Text style={[styles.body, { textAlign: 'center', marginTop: SPACING.sm, color: COLORS.textSecondary }]}>
           {message}
         </Text>
-        <TouchableOpacity style={[styles.primaryBtn, { marginTop: SPACING.xl, width: '100%' }]} onPress={resetEnrollment}>
-          <Text style={styles.primaryBtnText}>Try Again</Text>
-        </TouchableOpacity>
+        
+        <View style={styles.resultActions}>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.danger }]} onPress={resetEnrollment}>
+            <Text style={[styles.primaryBtnText, { color: '#FFF' }]}>Restart Enrollment</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
@@ -187,7 +211,10 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
     <SafeAreaView style={styles.container}>
       {/* Progress Indicators */}
       <View style={styles.headerRow}>
-        <Text style={styles.progressTitle}>Enrolling User: {userId}</Text>
+        <View style={styles.headerTextWrapper}>
+          <Text style={styles.progressLabel}>OPERATOR ID</Text>
+          <Text style={styles.progressTitle}>{userId}</Text>
+        </View>
         <View style={styles.progressBar}>
           {Array.from({ length: REQUIRED_FRAMES }).map((_, i) => (
             <View 
@@ -228,26 +255,42 @@ export const EnrollmentScreen: React.FC<EnrollmentScreenProps> = ({ navigation }
 const styles = StyleSheet.create({
   container:         { flex: 1, backgroundColor: COLORS.bgPrimary },
   scrollContainer:   { flexGrow: 1, justifyContent: 'center', padding: SPACING.md },
-  instructionCard:   { backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.xl, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  instructionCard:   { backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.xl, borderWidth: 1, borderColor: 'rgba(0, 229, 255, 0.05)' },
+  badgeCircle:       { width: 90, height: 90, borderRadius: RADIUS.full, backgroundColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: 'rgba(0, 229, 255, 0.15)' },
   heading:           { ...FONTS.heading, textAlign: 'center', color: '#FFF' },
   body:              { ...FONTS.body, lineHeight: 22, textAlign: 'center', marginTop: SPACING.sm, marginBottom: SPACING.lg },
-  inputContainer:    { marginBottom: SPACING.lg },
-  inputLabel:        { ...FONTS.label, color: COLORS.textSecondary, marginBottom: SPACING.xs },
-  input:             { height: 50, backgroundColor: COLORS.bgSurface, borderRadius: RADIUS.md, borderColor: COLORS.accentGlow, borderWidth: 1, color: '#FFF', paddingHorizontal: SPACING.md, fontSize: 16 },
-  tipsList:          { gap: SPACING.xs, marginBottom: SPACING.xl },
-  tipRow:            { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  
+  inputContainer:    { marginBottom: SPACING.xl },
+  inputLabel:        { ...FONTS.label, color: COLORS.textSecondary, marginBottom: SPACING.sm },
+  inputWrapper:      { flexDirection: 'row', alignItems: 'center', height: 52, backgroundColor: COLORS.bgSurface, borderRadius: RADIUS.md, borderColor: 'rgba(0, 229, 255, 0.1)', borderWidth: 1 },
+  input:             { flex: 1, height: '100%', color: '#FFF', paddingHorizontal: SPACING.md, fontSize: 16 },
+  
+  tipsList:          { backgroundColor: 'rgba(28, 34, 54, 0.3)', borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.xl, borderLeftWidth: 3, borderLeftColor: COLORS.accentSecondary },
+  tipsHeader:        { ...FONTS.label, color: COLORS.accentSecondary, marginBottom: SPACING.sm },
+  tipRow:            { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 8 },
+  statusDot:         { width: 6, height: 6, borderRadius: RADIUS.full, backgroundColor: COLORS.accent },
   tipText:           { ...FONTS.body, fontSize: 13, color: COLORS.textSecondary },
-  primaryBtn:        { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center' },
-  primaryBtnText:    { ...FONTS.button, color: '#FFF' },
-  ghostBtn:          { alignItems: 'center', paddingVertical: SPACING.sm, marginTop: SPACING.sm },
-  ghostBtnText:      { ...FONTS.body, color: COLORS.textSecondary },
-  headerRow:         { padding: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.bgCard },
-  progressTitle:     { ...FONTS.body, color: '#FFF', fontWeight: '600' },
-  progressBar:       { flexDirection: 'row', gap: SPACING.sm },
-  progressDot:       { width: 14, height: 14, borderRadius: RADIUS.full, backgroundColor: COLORS.bgSurface, borderWidth: 2, borderColor: COLORS.textMuted },
+  
+  primaryBtn:        { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  primaryBtnText:    { ...FONTS.button },
+  secondaryBtn:      { backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.textMuted, marginTop: SPACING.sm },
+  secondaryBtnText:  { ...FONTS.button, color: COLORS.textSecondary },
+  ghostBtn:          { alignItems: 'center', paddingVertical: SPACING.sm, marginTop: SPACING.md },
+  ghostBtnText:      { ...FONTS.body, color: COLORS.textSecondary, fontSize: 13 },
+  
+  headerRow:         { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.bgCard, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.05)' },
+  headerTextWrapper: { flex: 1 },
+  progressLabel:     { ...FONTS.label, color: COLORS.textSecondary, fontSize: 9 },
+  progressTitle:     { ...FONTS.heading, fontSize: 18, color: '#FFF' },
+  progressBar:       { flexDirection: 'row', gap: SPACING.xs },
+  progressDot:       { width: 16, height: 16, borderRadius: RADIUS.full, backgroundColor: COLORS.bgSurface, borderWidth: 2, borderColor: COLORS.textMuted },
   progressDotFilled: { backgroundColor: COLORS.success, borderColor: COLORS.success },
   progressDotActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accentGlow },
   ovalOverlay:       { position: 'absolute', top: '15%', left: '15%', right: '15%', bottom: '20%', borderRadius: 999, borderWidth: 2, borderColor: COLORS.ovalBorder, borderStyle: 'dashed', pointerEvents: 'none' },
-  processingOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: COLORS.bgPrimary + 'EE', justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
+  processingOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: COLORS.bgPrimary + 'F2', justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   processingText:    { ...FONTS.subhead, color: COLORS.accent },
+  
+  resultLayout:      { alignItems: 'center', justifyContent: 'center', padding: SPACING.xl },
+  successGlow:       { width: 140, height: 140, borderRadius: RADIUS.full, borderWidth: 3.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(28, 34, 54, 0.25)', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 15 },
+  resultActions:     { width: '100%', marginTop: SPACING.xxl, gap: SPACING.sm },
 });

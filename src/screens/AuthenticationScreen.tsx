@@ -247,31 +247,37 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
         >
           <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
             <View style={styles.instructionCard}>
-              <MaterialCommunityIcons name="face-recognition" size={80} color={COLORS.accent} style={{ alignSelf: 'center', marginBottom: SPACING.md }} />
-              <Text style={styles.heading}>Biometric Verification</Text>
+              <View style={styles.badgeCircle}>
+                <MaterialCommunityIcons name="face-recognition" size={48} color={COLORS.accent} />
+              </View>
+              
+              <Text style={styles.heading}>Biometric Audit</Text>
               <Text style={styles.body}>
-                Please enter your User ID. The application will issue a random liveness challenge to verify you are a live user.
+                Enter your Operator ID to execute biometric authentication. The terminal will require a 2-stage verification challenge.
               </Text>
 
               {/* ID Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>User ID / Employee Code</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter User ID to verify"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={userId}
-                  onChangeText={setUserId}
-                  autoCapitalize="characters"
-                  maxLength={20}
-                />
+                <Text style={styles.inputLabel}>Credential Code (ID)</Text>
+                <View style={styles.inputWrapper}>
+                  <MaterialCommunityIcons name="shield-key-outline" size={20} color={COLORS.textSecondary} style={{ marginLeft: SPACING.md }} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter ID to verify"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={userId}
+                    onChangeText={setUserId}
+                    autoCapitalize="characters"
+                    maxLength={20}
+                  />
+                </View>
               </View>
 
               <TouchableOpacity style={styles.primaryBtn} onPress={startAuthentication}>
-                <Text style={styles.primaryBtnText}>Verify Identity</Text>
+                <Text style={styles.primaryBtnText}>Initiate Verification</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => navigation.navigate('Enrollment')}>
-                <Text style={styles.ghostBtnText}>Or Enroll New User</Text>
+                <Text style={styles.ghostBtnText}>Or Setup New ID</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -282,17 +288,17 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Challenge Pill */}
+      {/* Challenge HUD Overlay */}
       {((step === 'LIVENESS1' && challenge1) || (step === 'LIVENESS2' && challenge2)) && (
         <View style={styles.challengeCard}>
           <MaterialCommunityIcons
             name={CHALLENGE_ICONS[step === 'LIVENESS1' ? challenge1 : challenge2] as any}
-            size={32}
+            size={28}
             color={COLORS.warning}
           />
           <View style={styles.challengeMeta}>
             <Text style={styles.challengeLabel}>
-              {step === 'LIVENESS1' ? 'Liveness Challenge 1' : 'Re-Liveness Challenge 2'}
+              {step === 'LIVENESS1' ? 'LIVENESS GATE 1/2' : 'RE-LIVENESS GATE 2/2'}
             </Text>
             <Text style={styles.challengeText}>
               {CHALLENGE_LABELS[step === 'LIVENESS1' ? challenge1 : challenge2]}
@@ -323,14 +329,16 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
         {/* Results Screen Badges */}
         {(step === 'SUCCESS' || step === 'FAIL') && (
-          <View style={[styles.resultOverlay, { backgroundColor: step === 'SUCCESS' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)' }]}>
-            <MaterialCommunityIcons 
-              name={step === 'SUCCESS' ? 'shield-check' : 'shield-alert'} 
-              size={120} 
-              color={step === 'SUCCESS' ? COLORS.success : COLORS.danger} 
-            />
+          <View style={[styles.resultOverlay, { backgroundColor: step === 'SUCCESS' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)' }]}>
+            <View style={[styles.resultCircle, { borderColor: step === 'SUCCESS' ? COLORS.success : COLORS.danger }]}>
+              <MaterialCommunityIcons 
+                name={step === 'SUCCESS' ? 'shield-check-outline' : 'shield-alert-outline'} 
+                size={80} 
+                color={step === 'SUCCESS' ? COLORS.success : COLORS.danger} 
+              />
+            </View>
             <Text style={[styles.resultTitle, { color: step === 'SUCCESS' ? COLORS.success : COLORS.danger }]}>
-              {step === 'SUCCESS' ? 'Access Granted' : 'Verification Failed'}
+              {step === 'SUCCESS' ? 'Access Granted' : 'Verification Denied'}
             </Text>
             <Text style={styles.resultDesc}>{statusText}</Text>
           </View>
@@ -342,7 +350,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
         {step === 'MATCHING' && (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={COLORS.accent} />
-            <Text style={styles.loadingText}>Comparing face template...</Text>
+            <Text style={styles.loadingText}>Comparing face template vector...</Text>
           </View>
         )}
 
@@ -352,13 +360,13 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
               style={[styles.primaryBtn, step === 'SUCCESS' && { backgroundColor: COLORS.success }]} 
               onPress={step === 'SUCCESS' ? () => navigation.goBack() : startAuthentication}
             >
-              <Text style={styles.primaryBtnText}>
-                {step === 'SUCCESS' ? 'Done' : 'Try Again'}
+              <Text style={[styles.primaryBtnText, step === 'SUCCESS' && { color: COLORS.bgPrimary }]}>
+                {step === 'SUCCESS' ? 'Complete Verification' : 'Re-authenticate'}
               </Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.ghostBtn} onPress={resetState}>
-              <Text style={styles.ghostBtnText}>Change User ID</Text>
+              <Text style={styles.ghostBtnText}>Change Credentials</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -370,29 +378,34 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: COLORS.bgPrimary },
   scrollContainer:{ flexGrow: 1, justifyContent: 'center', padding: SPACING.md },
-  instructionCard:{ backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.xl, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  instructionCard:{ backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.xl, borderWidth: 1, borderColor: 'rgba(0, 229, 255, 0.05)' },
+  badgeCircle:    { width: 90, height: 90, borderRadius: RADIUS.full, backgroundColor: COLORS.accentGlow, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: SPACING.md, borderWidth: 1, borderColor: 'rgba(0, 229, 255, 0.15)' },
   heading:        { ...FONTS.heading, textAlign: 'center', color: '#FFF' },
   body:           { ...FONTS.body, lineHeight: 22, textAlign: 'center', marginTop: SPACING.sm, marginBottom: SPACING.lg },
-  inputContainer: { marginBottom: SPACING.lg },
-  inputLabel:     { ...FONTS.label, color: COLORS.textSecondary, marginBottom: SPACING.xs },
-  input:          { height: 50, backgroundColor: COLORS.bgSurface, borderRadius: RADIUS.md, borderColor: COLORS.accentGlow, borderWidth: 1, color: '#FFF', paddingHorizontal: SPACING.md, fontSize: 16 },
-  primaryBtn:     { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center' },
-  primaryBtnText: { ...FONTS.button, color: '#FFF' },
-  ghostBtn:       { alignItems: 'center', paddingVertical: SPACING.sm, marginTop: SPACING.sm },
-  ghostBtnText:   { ...FONTS.body, color: COLORS.textSecondary },
   
-  challengeCard:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.bgCard, margin: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.lg, borderLeftWidth: 4, borderLeftColor: COLORS.warning },
+  inputContainer: { marginBottom: SPACING.xl },
+  inputLabel:     { ...FONTS.label, color: COLORS.textSecondary, marginBottom: SPACING.sm },
+  inputWrapper:   { flexDirection: 'row', alignItems: 'center', height: 52, backgroundColor: COLORS.bgSurface, borderRadius: RADIUS.md, borderColor: 'rgba(0, 229, 255, 0.1)', borderWidth: 1 },
+  input:          { flex: 1, height: '100%', color: '#FFF', paddingHorizontal: SPACING.md, fontSize: 16 },
+  
+  primaryBtn:     { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+  primaryBtnText: { ...FONTS.button },
+  ghostBtn:       { alignItems: 'center', paddingVertical: SPACING.sm, marginTop: SPACING.md },
+  ghostBtnText:   { ...FONTS.body, color: COLORS.textSecondary, fontSize: 13 },
+  
+  challengeCard:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.bgCard, margin: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, borderLeftWidth: 3, borderLeftColor: COLORS.warning, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.05)' },
   challengeMeta:  { flex: 1 },
-  challengeLabel: { fontSize: 11, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase' },
-  challengeText:  { ...FONTS.subhead, fontWeight: '700', color: COLORS.warning, marginTop: 2 },
-  timerPill:      { backgroundColor: 'rgba(245, 158, 11, 0.15)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
-  timerText:      { fontSize: 14, fontWeight: '700', color: COLORS.warning },
+  challengeLabel: { fontSize: 10, fontWeight: '800', color: COLORS.textSecondary, letterSpacing: 1 },
+  challengeText:  { ...FONTS.subhead, fontSize: 15, fontWeight: '700', color: COLORS.warning, marginTop: 2 },
+  timerPill:      { backgroundColor: 'rgba(251, 191, 36, 0.12)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
+  timerText:      { fontSize: 12, fontWeight: '800', color: COLORS.warning },
   
   cameraWrapper:  { flex: 1, position: 'relative' },
-  ovalOverlay:    { position: 'absolute', top: '15%', left: '15%', right: '15%', bottom: '20%', borderRadius: 999, borderWidth: 3, borderStyle: 'dashed', pointerEvents: 'none' },
-  resultOverlay:  { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
-  resultTitle:    { ...FONTS.heading, fontSize: 26, marginTop: SPACING.lg, fontWeight: '700' },
-  resultDesc:     { ...FONTS.body, textAlign: 'center', marginTop: SPACING.sm, color: '#FFF' },
+  ovalOverlay:    { position: 'absolute', top: '15%', left: '15%', right: '15%', bottom: '20%', borderRadius: 999, borderWidth: 2.5, borderStyle: 'dashed', pointerEvents: 'none' },
+  resultOverlay:  { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl, backgroundColor: COLORS.bgPrimary + 'F2' },
+  resultCircle:   { width: 140, height: 140, borderRadius: RADIUS.full, borderWidth: 3.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(28, 34, 54, 0.25)' },
+  resultTitle:    { ...FONTS.heading, fontSize: 24, marginTop: SPACING.xl, fontWeight: '700' },
+  resultDesc:     { ...FONTS.body, textAlign: 'center', marginTop: SPACING.sm, color: COLORS.textSecondary, paddingHorizontal: SPACING.md },
   
   footerActions:  { padding: SPACING.md, backgroundColor: COLORS.bgPrimary },
   loadingRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, padding: SPACING.md },

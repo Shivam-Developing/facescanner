@@ -31,13 +31,11 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
       });
       return () => unsubscribe();
     } else {
-      // In mock/Snack environment we assume online by default,
-      // but let the user know they are in simulated preview
       setIsOnline(true);
     }
   }, []);
 
-  // Poll local DB state on focus
+  // Poll local DB state
   useEffect(() => {
     loadStatus();
     const interval = setInterval(loadStatus, 4000); // refresh every 4 seconds
@@ -74,16 +72,16 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
   return (
     <SafeAreaView style={styles.container}>
       {/* Network banner */}
-      <View style={[styles.networkBanner, { backgroundColor: isOnline ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)' }]}>
+      <View style={[styles.networkBanner, { backgroundColor: isOnline ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)', borderColor: isOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)' }]}>
         <MaterialCommunityIcons
           name={isOnline ? 'wifi' : 'wifi-off'}
-          size={20}
+          size={18}
           color={isOnline ? COLORS.success : COLORS.danger}
         />
         <Text style={[styles.networkText, { color: isOnline ? COLORS.success : COLORS.danger }]}>
           {isOnline 
-            ? 'Online — Ready to synchronize' 
-            : 'Offline — Events will queue on device'}
+            ? 'ONLINE — READY TO SYNCHRONIZE' 
+            : 'OFFLINE — QUEUED ON DEVICE'}
         </Text>
       </View>
 
@@ -94,8 +92,8 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
           <Text style={styles.statLabel}>Pending Sync</Text>
         </View>
         <View style={styles.statCard}>
-          <MaterialCommunityIcons name="clock-outline" size={20} color={COLORS.textSecondary} style={{ marginBottom: 4 }} />
-          <Text style={styles.statLabel}>Last Cloud Sync</Text>
+          <MaterialCommunityIcons name="clock-check-outline" size={24} color={COLORS.accentSecondary} style={{ marginBottom: SPACING.xs }} />
+          <Text style={styles.statLabel}>Last Sync</Text>
           <Text style={styles.statSubvalue}>{lastSync}</Text>
         </View>
       </View>
@@ -108,15 +106,15 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         activeOpacity={0.85}
       >
         {syncing ? (
-          <ActivityIndicator size="small" color="#FFF" />
+          <ActivityIndicator size="small" color={COLORS.bgPrimary} />
         ) : (
-          <MaterialCommunityIcons name="cloud-upload-outline" size={20} color="#FFF" />
+          <MaterialCommunityIcons name="database-export-outline" size={20} color={COLORS.bgPrimary} />
         )}
-        <Text style={styles.syncBtnText}>{syncing ? 'Syncing Queue...' : 'Force Sync Now'}</Text>
+        <Text style={styles.syncBtnText}>{syncing ? 'Syncing Queue...' : 'Sync Pending Events'}</Text>
       </TouchableOpacity>
 
       {/* Event Logs Header */}
-      <Text style={styles.sectionHeader}>On-Device Authentication Log</Text>
+      <Text style={styles.sectionHeader}>Audit Trail Logs</Text>
       
       {/* Event List */}
       <FlatList
@@ -124,21 +122,23 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         keyExtractor={(item, index) => item.id?.toString() ?? index.toString()}
         renderItem={({ item }) => (
           <View style={styles.eventRow}>
-            <MaterialCommunityIcons
-              name={item.success ? 'check-circle' : 'close-circle'}
-              size={22}
-              color={item.success ? COLORS.success : COLORS.danger}
-            />
+            <View style={[styles.statusGlowRing, { borderColor: item.success ? COLORS.success : COLORS.danger }]}>
+              <MaterialCommunityIcons
+                name={item.success ? 'shield-check-outline' : 'shield-remove-outline'}
+                size={18}
+                color={item.success ? COLORS.success : COLORS.danger}
+              />
+            </View>
             <View style={styles.eventMeta}>
-              <Text style={styles.eventUser}>User: {item.userId}</Text>
-              <Text style={styles.eventTime}>{new Date(item.timestamp).toLocaleTimeString()}</Text>
+              <Text style={styles.eventUser}>ID: {item.userId}</Text>
               <Text style={styles.eventSimilarity}>
-                Similarity: {(item.similarity * 100).toFixed(1)}% ({item.challenge})
+                Match: {(item.similarity * 100).toFixed(1)}% · Challenges: {item.challenge}
               </Text>
+              <Text style={styles.eventTime}>{new Date(item.timestamp).toLocaleString()}</Text>
             </View>
             <View style={[
               styles.syncBadge, 
-              { backgroundColor: item.synced ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)' }
+              { backgroundColor: item.synced ? 'rgba(16, 185, 129, 0.08)' : 'rgba(251, 191, 36, 0.08)' }
             ]}>
               <Text style={[styles.syncBadgeText, { color: item.synced ? COLORS.success : COLORS.warning }]}>
                 {item.synced ? 'Synced' : 'Pending'}
@@ -148,8 +148,8 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="card-text-outline" size={48} color={COLORS.textMuted} />
-            <Text style={styles.emptyText}>No local events recorded yet.</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={48} color={COLORS.textMuted} />
+            <Text style={styles.emptyText}>No authentication history logged.</Text>
           </View>
         }
         contentContainerStyle={{ paddingBottom: SPACING.md }}
@@ -160,24 +160,25 @@ export const SyncStatusScreen: React.FC<{ navigation: any }> = ({ navigation }) 
 
 const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: COLORS.bgPrimary, padding: SPACING.md },
-  networkBanner:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md },
-  networkText:    { ...FONTS.subhead, fontWeight: '700' },
+  networkBanner:  { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, marginBottom: SPACING.md, borderWidth: 1 },
+  networkText:    { ...FONTS.label, fontSize: 10 },
   statsRow:       { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.md },
-  statCard:       { flex: 1, backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', justifyContent: 'center', minHeight: 110, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  statCard:       { flex: 1, backgroundColor: COLORS.bgCard, borderRadius: RADIUS.lg, padding: SPACING.md, alignItems: 'center', justifyContent: 'center', minHeight: 110, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.03)' },
   statValue:      { ...FONTS.heading, fontSize: 38, color: COLORS.accent },
-  statLabel:      { ...FONTS.label, color: COLORS.textSecondary, fontWeight: '700' },
-  statSubvalue:   { ...FONTS.body, fontSize: 11, color: COLORS.textMuted, textAlign: 'center', marginTop: 4 },
-  syncBtn:        { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginBottom: SPACING.lg },
+  statLabel:      { ...FONTS.label, color: COLORS.textSecondary },
+  statSubvalue:   { ...FONTS.body, fontSize: 10, color: COLORS.textMuted, textAlign: 'center', marginTop: 4 },
+  syncBtn:        { backgroundColor: COLORS.accent, borderRadius: RADIUS.lg, paddingVertical: SPACING.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginBottom: SPACING.lg, shadowColor: COLORS.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
   syncBtnDisabled:{ opacity: 0.5 },
-  syncBtnText:    { ...FONTS.button, color: '#FFF' },
-  sectionHeader:  { ...FONTS.heading, fontSize: 16, marginBottom: SPACING.sm, color: '#FFF' },
-  eventRow:       { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.bgCard, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm },
+  syncBtnText:    { ...FONTS.button },
+  sectionHeader:  { ...FONTS.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.xs },
+  eventRow:       { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, backgroundColor: COLORS.bgCard, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.02)' },
+  statusGlowRing: { width: 34, height: 34, borderRadius: RADIUS.full, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(28, 34, 54, 0.15)' },
   eventMeta:      { flex: 1 },
-  eventUser:      { ...FONTS.body, color: '#FFF', fontWeight: '700' },
-  eventTime:      { ...FONTS.label, fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
-  eventSimilarity:{ ...FONTS.label, fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  eventUser:      { ...FONTS.body, color: '#FFF', fontWeight: '700', fontSize: 15 },
+  eventSimilarity:{ ...FONTS.body, fontSize: 11, color: COLORS.textSecondary, marginTop: 1 },
+  eventTime:      { ...FONTS.label, fontSize: 9, color: COLORS.textMuted, marginTop: 3 },
   syncBadge:      { paddingHorizontal: SPACING.sm, paddingVertical: 4, borderRadius: RADIUS.full },
-  syncBadgeText:  { fontSize: 11, fontWeight: '700' },
+  syncBadgeText:  { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: SPACING.xxl, gap: SPACING.sm },
   emptyText:      { ...FONTS.body, color: COLORS.textMuted },
 });
