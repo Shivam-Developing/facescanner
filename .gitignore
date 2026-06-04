@@ -36,6 +36,8 @@ yarn-error.*
 *.tsbuildinfo
 
 # React Native / Android / iOS
+android/
+ios/
 ios/Pods/
 android/.gradle/
 android/app/build/
