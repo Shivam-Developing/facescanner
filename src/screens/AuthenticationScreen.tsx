@@ -11,7 +11,7 @@ import StorageService from '../services/StorageService';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { isMockEnvironment } from '../utils/Environment';
 
-type AuthStep = 'IDLE' | 'LIVENESS1' | 'MATCHING' | 'LIVENESS2' | 'SUCCESS' | 'FAIL';
+type AuthStep = 'IDLE' | 'IDENTIFYING' | 'LIVENESS' | 'SUCCESS' | 'FAIL';
 
 const CHALLENGE_ICONS: Record<string, string> = {
   BLINK:      'eye-outline',
@@ -37,19 +37,21 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
   const [step, setStep]             = useState<AuthStep>('IDLE');
   const [userId, setUserId]           = useState(initialUserId);
-  const [challenge1, setChallenge1] = useState('');
-  const [challenge2, setChallenge2] = useState('');
+  const [challenge, setChallenge]   = useState('');
+  const [liveSimilarity, setLiveSimilarity] = useState(0);
   const [similarityResult, setSimilarityResult] = useState(0);
   const [statusText, setStatusText] = useState('');
   const [timer, setTimer]           = useState(7);
   
   const timerRef = useRef<NodeJS.Timeout>();
   const ringScale = useRef(new Animated.Value(1)).current;
+  const matchCountRef = useRef(0);
+  const isProcessingRef = useRef(false);
 
   // Pulse animation on the biometric ring during matching/scanning
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
-    if (step === 'LIVENESS1' || step === 'MATCHING' || step === 'LIVENESS2') {
+    if (step === 'IDENTIFYING' || step === 'LIVENESS') {
       animation = Animated.loop(
         Animated.sequence([
           Animated.timing(ringScale, { toValue: 1.15, duration: 800, useNativeDriver: true }),
@@ -68,6 +70,39 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
     if (timerRef.current) clearInterval(timerRef.current);
   }, []);
 
+  // Simulating matching and transition in mock/Snack environment
+  useEffect(() => {
+    let mockMatchingTimeout: NodeJS.Timeout;
+    if (isMockEnvironment() && step === 'IDENTIFYING') {
+      setStatusText('Scanning operator face...');
+      mockMatchingTimeout = setTimeout(async () => {
+        setSimilarityResult(0.85);
+        setLiveSimilarity(0.85);
+        
+        // Match succeeded, transition directly to the liveness challenge!
+        LivenessDetector.reset();
+        const issued = LivenessDetector.issueChallenge();
+        setChallenge(issued);
+        setStep('LIVENESS');
+        setTimer(7);
+        setStatusText(CHALLENGE_LABELS[issued] || 'Authenticate your face');
+        
+        if (timerRef.current) clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => {
+          setTimer(t => {
+            if (t <= 1) {
+              clearInterval(timerRef.current!);
+              failAuthentication('Time out. Liveness check failed.');
+              return 0;
+            }
+            return t - 1;
+          });
+        }, 1000);
+      }, 2500);
+    }
+    return () => clearTimeout(mockMatchingTimeout);
+  }, [step]);
+
   const startAuthentication = async () => {
     const id = userId.trim();
     if (!id) {
@@ -85,27 +120,14 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
       return;
     }
 
-    // Start challenge 1
-    LivenessDetector.reset();
-    const issued1 = LivenessDetector.issueChallenge();
-    setChallenge1(issued1);
-    setChallenge2('');
-    setStep('LIVENESS1');
-    setTimer(7);
-    setStatusText(CHALLENGE_LABELS[issued1] || 'Authenticate your face');
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    timerRef.current = setInterval(() => {
-      setTimer(t => {
-        if (t <= 1) {
-          clearInterval(timerRef.current!);
-          failAuthentication('Time out. First liveness check failed.');
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
+    // Start face identification scan
+    matchCountRef.current = 0;
+    isProcessingRef.current = false;
+    setLiveSimilarity(0);
+    setSimilarityResult(0);
+    setChallenge('');
+    setStep('IDENTIFYING');
+    setStatusText('Align face with camera to match template');
   };
 
   const failAuthentication = async (message: string) => {
@@ -119,24 +141,18 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
       userId: userId.trim(),
       timestamp: Date.now(),
       success: false,
-      similarity: 0.0,
-      challenge: challenge2 ? `${challenge1},${challenge2}` : `${challenge1 || 'NONE'},NONE`,
+      similarity: similarityResult || liveSimilarity,
+      challenge: challenge || 'NONE',
       synced: false,
     });
   };
 
   const handleFaceDetected = useCallback(async (face: any, facePixels: Float32Array | null) => {
-    if (step !== 'LIVENESS1' && step !== 'LIVENESS2') return;
+    if (step !== 'IDENTIFYING' && step !== 'LIVENESS') return;
 
-    if (step === 'LIVENESS1') {
-      // Check compliance for challenge 1
-      const passed = LivenessDetector.evaluateFace(face);
-      if (!passed) return;
-
-      // First liveness passed! Clean up timers and proceed to match
-      if (timerRef.current) clearInterval(timerRef.current);
-      setStep('MATCHING');
-      setStatusText('Liveness verified. Performing matching...');
+    if (step === 'IDENTIFYING') {
+      if (isProcessingRef.current) return;
+      isProcessingRef.current = true;
 
       try {
         const id = userId.trim();
@@ -148,68 +164,55 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
           return;
         }
 
-        // Extract raw frame embedding
-        const inputFrame = facePixels || new Float32Array(112 * 112 * 3).fill(0.1);
-        const liveEmbedding = await FaceNetService.extractEmbedding(inputFrame);
+        // Extract raw frame embedding and compare
+        if (facePixels) {
+          const liveEmbedding = await FaceNetService.extractEmbedding(facePixels);
+          const similarity = FaceNetService.cosineSimilarity(liveEmbedding, storedEmbedding);
+          setLiveSimilarity(similarity);
+          setStatusText(`Identifying face... Match: ${(similarity * 100).toFixed(0)}%`);
 
-        // Cosine similarity matching
-        let similarity = FaceNetService.cosineSimilarity(liveEmbedding, storedEmbedding);
-        
-        if (isMockEnvironment()) {
-          // Force successful match score in mock mode for enrolled users
-          similarity = 0.82 + Math.random() * 0.1;
-        }
+          if (FaceNetService.isMatch(similarity)) {
+            matchCountRef.current++;
+            if (matchCountRef.current >= 3) {
+              // 3 consecutive frames matched! Identity locked.
+              setSimilarityResult(similarity);
+              matchCountRef.current = 0;
 
-        const matched = FaceNetService.isMatch(similarity);
-        setSimilarityResult(similarity);
+              // Immediately transition to liveness challenge
+              LivenessDetector.reset();
+              const issued = LivenessDetector.issueChallenge();
+              setChallenge(issued);
+              setStep('LIVENESS');
+              setTimer(7);
+              setStatusText(CHALLENGE_LABELS[issued] || 'Authenticate your face');
 
-        if (matched) {
-          // Match succeeded! Now start secondary challenge (LIVENESS2)
-          let issued2 = LivenessDetector.issueChallenge();
-          while (issued2 === challenge1) {
-            issued2 = LivenessDetector.issueChallenge();
+              if (timerRef.current) clearInterval(timerRef.current);
+              timerRef.current = setInterval(() => {
+                setTimer(t => {
+                  if (t <= 1) {
+                    clearInterval(timerRef.current!);
+                    failAuthentication('Time out. Liveness check failed.');
+                    return 0;
+                  }
+                  return t - 1;
+                });
+              }, 1000);
+            }
+          } else {
+            matchCountRef.current = 0;
           }
-          setChallenge2(issued2);
-          setStep('LIVENESS2');
-          setTimer(7);
-          setStatusText(CHALLENGE_LABELS[issued2] || 'Perform secondary check');
-
-          if (timerRef.current) clearInterval(timerRef.current);
-          timerRef.current = setInterval(() => {
-            setTimer(t => {
-              if (t <= 1) {
-                clearInterval(timerRef.current!);
-                failAuthentication('Time out. Re-liveness check failed.');
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-        } else {
-          setStep('FAIL');
-          setStatusText(`Access Denied: similarity ${(similarity * 100).toFixed(1)}% too low`);
-          
-          await StorageService.logAuthEvent({
-            userId: id,
-            timestamp: Date.now(),
-            success: false,
-            similarity,
-            challenge: `${challenge1},NONE`,
-            synced: false,
-          });
         }
-
       } catch (e) {
         console.error('[Authentication] Matching error:', e);
-        setStep('FAIL');
-        setStatusText('Authentication error occurred.');
+      } finally {
+        isProcessingRef.current = false;
       }
-    } else if (step === 'LIVENESS2') {
-      // Check compliance for challenge 2
+    } else if (step === 'LIVENESS') {
+      // Check compliance for challenge
       const passed = LivenessDetector.evaluateFace(face);
       if (!passed) return;
 
-      // Liveness 2 passed! Fully authenticated!
+      // Liveness passed! Fully authenticated!
       if (timerRef.current) clearInterval(timerRef.current);
       setStep('SUCCESS');
       setStatusText(`Identity Verified: ${(similarityResult * 100).toFixed(1)}% match`);
@@ -220,22 +223,25 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
         timestamp: Date.now(),
         success: true,
         similarity: similarityResult,
-        challenge: `${challenge1},${challenge2}`,
+        challenge,
         synced: false,
       });
     }
-  }, [step, userId, challenge1, challenge2, similarityResult]);
+  }, [step, userId, challenge, similarityResult]);
 
   const resetState = () => {
     setStep('IDLE');
     setStatusText('');
-    setChallenge1('');
-    setChallenge2('');
+    setChallenge('');
+    setLiveSimilarity(0);
     setSimilarityResult(0);
+    matchCountRef.current = 0;
+    isProcessingRef.current = false;
   };
 
   const ovalColor = step === 'SUCCESS' ? COLORS.ovalSuccess
                   : step === 'FAIL'    ? COLORS.ovalFail
+                  : liveSimilarity >= 0.65 ? COLORS.ovalSuccess
                   : COLORS.ovalBorder;
 
   if (step === 'IDLE') {
@@ -253,7 +259,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
               
               <Text style={styles.heading}>Biometric Audit</Text>
               <Text style={styles.body}>
-                Enter your Operator ID to execute biometric authentication. The terminal will require a 2-stage verification challenge.
+                Enter your Operator ID to execute biometric authentication. The terminal will scan for face identity matches and run liveness checks.
               </Text>
 
               {/* ID Input */}
@@ -288,25 +294,41 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Challenge HUD Overlay */}
-      {((step === 'LIVENESS1' && challenge1) || (step === 'LIVENESS2' && challenge2)) && (
+      {/* Live Challenge Banner */}
+      {step === 'LIVENESS' && challenge && (
         <View style={styles.challengeCard}>
           <MaterialCommunityIcons
-            name={CHALLENGE_ICONS[step === 'LIVENESS1' ? challenge1 : challenge2] as any}
+            name={CHALLENGE_ICONS[challenge] as any}
             size={28}
             color={COLORS.warning}
           />
           <View style={styles.challengeMeta}>
-            <Text style={styles.challengeLabel}>
-              {step === 'LIVENESS1' ? 'LIVENESS GATE 1/2' : 'RE-LIVENESS GATE 2/2'}
-            </Text>
-            <Text style={styles.challengeText}>
-              {CHALLENGE_LABELS[step === 'LIVENESS1' ? challenge1 : challenge2]}
-            </Text>
+            <Text style={styles.challengeLabel}>LIVENESS VERIFICATION</Text>
+            <Text style={styles.challengeText}>{CHALLENGE_LABELS[challenge]}</Text>
           </View>
           <View style={styles.timerPill}>
             <Text style={styles.timerText}>{timer}s</Text>
           </View>
+        </View>
+      )}
+
+      {/* Face Identification HUD Overlay */}
+      {step === 'IDENTIFYING' && (
+        <View style={styles.challengeCard}>
+          <ActivityIndicator size="small" color={COLORS.accent} style={{ marginRight: 4 }} />
+          <View style={styles.challengeMeta}>
+            <Text style={styles.challengeLabel}>FACIAL IDENTIFICATION</Text>
+            <Text style={[styles.challengeText, { color: COLORS.accent }]}>
+              {liveSimilarity > 0 
+                ? `Biometric Match: ${(liveSimilarity * 100).toFixed(0)}%` 
+                : 'Searching templates...'}
+            </Text>
+          </View>
+          {liveSimilarity >= 0.65 && (
+            <View style={[styles.timerPill, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+              <Text style={[styles.timerText, { color: COLORS.success, fontSize: 10 }]}>LOCKED</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -315,7 +337,7 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
         <FaceCamera
           onFaceDetected={handleFaceDetected}
           instructionText={statusText}
-          isActive={step === 'LIVENESS1' || step === 'LIVENESS2'}
+          isActive={step === 'IDENTIFYING' || step === 'LIVENESS'}
         />
         
         {/* Animated Oval Ring */}
@@ -347,13 +369,6 @@ export const AuthenticationScreen: React.FC<AuthenticationScreenProps> = ({ navi
 
       {/* Action Footer */}
       <View style={styles.footerActions}>
-        {step === 'MATCHING' && (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" color={COLORS.accent} />
-            <Text style={styles.loadingText}>Comparing face template vector...</Text>
-          </View>
-        )}
-
         {(step === 'SUCCESS' || step === 'FAIL') && (
           <View style={{ gap: SPACING.sm }}>
             <TouchableOpacity 
@@ -398,7 +413,7 @@ const styles = StyleSheet.create({
   challengeLabel: { fontSize: 10, fontWeight: '800', color: COLORS.textSecondary, letterSpacing: 1 },
   challengeText:  { ...FONTS.subhead, fontSize: 15, fontWeight: '700', color: COLORS.warning, marginTop: 2 },
   timerPill:      { backgroundColor: 'rgba(251, 191, 36, 0.12)', paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
-  timerText:      { fontSize: 12, fontWeight: '800', color: COLORS.warning },
+  timerText:      { fontSize: 11, fontWeight: '800', color: COLORS.warning },
   
   cameraWrapper:  { flex: 1, position: 'relative' },
   ovalOverlay:    { position: 'absolute', top: '15%', left: '15%', right: '15%', bottom: '20%', borderRadius: 999, borderWidth: 2.5, borderStyle: 'dashed', pointerEvents: 'none' },
